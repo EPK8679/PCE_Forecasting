@@ -1,1 +1,5 @@
 # PCE_Forecasting
+
+Forecasting is a strategy that uses previous data as inputs to make well-informed predictions about the direction of future trends. Forecasting is used by businesses to determine how to allocate their budgets or plan for anticipated expenses in future (Tuovila, n.d.). Since 1959 through 2021, US-seasonally adjusted personal consumption expenditure data is available for analysis and forecasting to determine expenditure in coming months using historical data. The given historical data is sequence of observation across time specified in years hence it follows a time series format for further development.
+
+Pre-processing the data to discover missing values and imputing using appropriate method with time - series imputation. Forecasting methods such as simple forecasting, exponential and arima models, is the primary analysis to compare predictive capacity. These models gained a better understanding by analysing the accuracy of each model’s performance and determining the optimal model with fewest errors.
