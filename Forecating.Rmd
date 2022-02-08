@@ -1,0 +1,382 @@
+---
+title: "Forecasting"
+author: "EPK"
+date: "06/02/2022"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# Part 1
+## Introduction
+
+---
+
+
+Forecasting is a strategy that uses previous data as inputs to make well-informed predictions about the direction of future trends. Forecasting is used by businesses to determine how to allocate their budgets or plan for anticipated expenses in future (Tuovila, n.d.). Since 1959 through 2021, US-seasonally adjusted personal consumption expenditure data is available for analysis and forecasting to determine expenditure in coming months using historical data. The given historical data is sequence of observation across time specified in years hence it follows a time series format for further development.
+
+Pre-processing the data to discover missing values and imputing using appropriate method with time - series imputation. Forecasting methods such as simple forecasting, exponential and arima models, is the primary analysis to compare predictive capacity. These models gained a better understanding by analysing the accuracy of each model’s performance and determining the optimal model with fewest errors.
+
+
+## Model Analysis 
+
+---
+
+Installing and invoking the essential libraries for forecasting modeling is the first step in the analysis. Read the pce dataset into a data frame after adding the relevant libraries to do further pre-processing of missing data and discovering the structure of variables to check whether they are the correct class of variable if they do not need to be converted to the appropriate class type.
+
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+#Install Packages
+
+# install.packages("dplyr")
+# install.packages("VIM")
+# install.packages("tidyverse")
+# install.packages("mice")
+# install.packages("imputeTS")
+# install.packages("forecast")
+# install.packages("ggplot2")
+# install.packages("fpp")
+
+library(dplyr) #Grammar of data manipulation
+library(VIM)   #For displaying the missing values
+library(tidyverse) #To tidy the data structure
+library(mice)   #For Multiple imputation
+library(imputeTS) #For imputing time series
+library(forecast) #For forecast methods
+library(ggplot2)  #Grammar of graphics
+library(fpp) #For one step rolling variation estimation
+```
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+
+rm(list=ls()) #clears all data from your curent Global Environment
+#Reading the .csv file
+pce_data <- read.csv("PCE.csv",stringsAsFactors = TRUE ,na.strings = c("",NA))
+#Structure of dataset (pce_data)
+str(pce_data)
+```
+
+The variable date is in factor format, which needs to be converted to the appropriate format, which is date, because the structure of the data must be accurate in order to perform multiple imputation.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+
+#Conversion of factor to date format
+pce_data$DATE <- as.Date(format(as.Date(pce_data$DATE, "%d/%m/%Y"), "%d/%m/%Y"), format = "%d/%m/%Y")
+
+```
+### Multiple Imputation
+
+Imputation is a technique mainly used for replacing missing data in dataset. The technique used to impute missing values is multiple imputation where the process of substituting multiple values for each missing cell based on shared predictive distribution(Alice,2015).
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+incomplete_rows <- sum(!complete.cases(pce_data)) #Incomplete rows in PCE dataset
+print(paste0("Number of incomplete Rows:",incomplete_rows))
+#Plotting the real dataset
+plot(pce_data, main = "Graph of PCE Dataset", col = "blue", lwd = 2)
+```
+
+The graph shows that there are a few missing values, which are represented by unshaded circles.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+#Displaying NA values
+aggr(pce_data, numbers=TRUE, prop=FALSE)
+
+#Performing Multiple Imputation
+pce_mi_mice <- mice(pce_data,m=5,maxit=10)
+mi_pce <- complete(pce_mi_mice)
+incomplete_rows_1 <- sum(!complete.cases(mi_pce)) #Incomplete rows in PCE dataset
+print(paste0("Number of incomplete Rows:",incomplete_rows_1))
+```
+
+The shared predictive distribution method replaces all NA values with appropriate personal consumption values.
+
+### Analysis of Time Series Imputation
+
+---
+
+Here, dataset is converted to time series model using the function ‘ts’ where frequency denotes number of periods, h=12 denotes it is monthly dataset.
+
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+#Time series of missing data.
+pce_TS_Miss <- ts(pce_data$PCE,start=c(1959,1), end=c(2021,4), frequency=12)
+
+
+
+
+#Time series of imputed data.
+
+pce_TS <- ts(mi_pce$PCE,start=c(1959,1), end=c(2021,4), frequency=12)
+
+#Imputing the data with time series imputation methods
+pce_datasetComplete1<-na_interpolation(pce_TS_Miss)
+pce_datasetComplete2<-na_ma(pce_TS_Miss, k=4, weighting = "exponential")
+pcedatasetComplete3 <-na_kalman(pce_TS_Miss, model="auto.arima")
+
+#For comparison with original dataset and imputed dataset
+test_pce <- cbind(pce_TS_Miss,pce_TS,pce_datasetComplete1,pce_datasetComplete2,pcedatasetComplete3)
+test_pce <- as.data.frame(test_pce)
+
+analysis_missing <- test_pce %>% 
+   filter(c(is.na(pce_TS_Miss)))
+
+
+```
+The dataset obtained using time series imputed approach is compared with dataset obtained using multiple imputation. The ‘na kalman’ time series imputation has the smallest difference of all the others and is used for further investigation.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+
+#Plotting the Imouted TS PCE dataset
+autoplot(pce_TS, main ="Graph of TS Imputed PCE Dataset", series =  "TS(Multiple Imputation)",ylab = "Time Series(TS)") +
+  autolayer(pce_datasetComplete1,  series = "TS(NA_Interpolation)",alpha = 0.5) +
+  autolayer(pce_datasetComplete2, series = "TS(Moving Average)",alpha = 0.5)+
+  autolayer(pcedatasetComplete3, series = "TS(NA_Kalman)",alpha = 0.5) +
+  guides(colour = guide_legend("Model"))
+
+```
+
+The graph clearly illustrates time series modeled using various imputation methods, and it is evident that the error between all four imputation methods is very low. In addition, the graph demonstrates that personal consumption expenditures are on the rising trend over time.
+
+
+### Moving Average
+
+Moving average is a smoothing technique that helps to understand the trend in the time series by smoothening the fluctuation during COVID-19 period.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+#Smoothing Technique the fluctation, it shows the trend better understanding the of graph
+ma_pce <- ma(pcedatasetComplete3,3) #3 is the no of values took for average  and odd value k
+#Uneven fluctuations can be removed using moving average
+plot(pcedatasetComplete3, main="Plot for Moving Average",ylab="Time Series(TS)")
+lines(ma_pce, col="red", lwd=3)
+```
+### Decomposition
+
+Decomposition is used to extract the trend and seasonality from the observed time series dataset, and the type is additive because there is no significant seasonality fluctuation over time for the given dataset.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+#Decomposition separately  see the trend, seasonality , irregularities to understand the data
+de <- decompose(pcedatasetComplete3, type="additive")
+plot(de)
+```
+The fundamental disadvantage of normal additive decomposition is that it ignores irregular components and assumes seasonal components over time because it does not use the initial and last few observations, which are NA values. In order to address this challenge, Loess decomposition makes use of loess functionality to help with trend and can handle any form of seasonality over time.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+
+# Loess Decomposition
+lo_pce <- stl(pcedatasetComplete3, s.window="periodic",robust=TRUE)	
+plot(lo_pce, main="Plot of Loess Decomposition")
+```
+
+
+### 1
+
+### Forecast Modeling
+
+To model time series and assess the accuracy of each model, divide the dataset into 80-20 percent training and test datasets, which will help you identify the optimal model with the minimal performance errors. 
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+#Train Set and Test Set 80-20%
+
+pststrain <- subset(pcedatasetComplete3, end = length(pcedatasetComplete3)*0.80)
+
+pststest<- window(pcedatasetComplete3, start=c(2008,11), end=c(2021,4))
+```
+
+### Simple Forecasting Methods
+
+Some simple forecasting approaches include training the model with training data and forecasting future data by passing the number of periods equal to the number of observations in test data to assess the model's performance.
+
+The forecasting techniques are trained using training data to determine the model's performance, as shown below, and a graphical depiction of the forecast generated with original time series data is used to evaluate the various methods.
+
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+# ------- Simple Forecasting Techniques -------
+# average method
+ifit1 <- meanf(pststrain, h=150)
+print("Averge Method(meanf)")
+accuracy(ifit1, pststest)
+
+
+# na?ve method
+ifit2 <- naive(pststrain, h=150)
+print("Naive Method(naive)")
+accuracy(ifit2, pststest)
+
+# seasonal na?ve method
+ifit3 <- snaive(pststrain, h=150)	
+print("Seasonal Naive Method(snaive)")
+accuracy(ifit3, pststest)
+ 
+
+
+# drift method
+ifit4 <- rwf(pststrain,drift=TRUE,h=150)
+print("Drift Method(rwf)")
+accuracy(ifit4, pststest)
+
+
+
+autoplot(pcedatasetComplete3, main="Plot of Simple Forecasting Methods", ylab = "Time Series(TS)") +
+  autolayer(ifit1,  series = "Average",alpha = 0.5) +
+  autolayer(ifit2, series = "Naive",alpha = 0.5)+
+  autolayer(ifit3, series = "Seasonal Naive",alpha = 0.5) +
+  autolayer(ifit4, series="Drift",alpha = 0.5)+
+  guides(colour = guide_legend("Model"))
+```
+
+The analysis demonstrates that the drift method outperforms other models since the drift forecast value is closer to the original time series plot. When comparing MASE, RMSE, and MAE with other models, the performance metrics suggest that drift has the lowest errors. Drift's MASE is 5.5057, which is the lowest of all other models. 
+
+The seasonal naive performance will not be as good as drift due to seasonaly adjusted data, whereas the naive and average methods will have a large error difference from the original time series data due to the same observation, which is the last observation and average value of periods for the forecast of future periods, respectively.
+
+### 2
+### Exponential Smoothing Model
+
+Exponential smoothing is a univariate data time series forecasting approach that can be expanded to support data with a systematic trend or seasonal component (Brownlee, 2018). The method forecasts by analysing historical data, however recent data is more weighted in the times series dataset than older observations.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+#Exponential Smoothing
+ifit_ets_AAN <- ets(pststrain, model = 'AAN')
+
+#Exponential Smoothing with by passing model ZZZ(automatic)
+ifit_ets_auto <- ets(pststrain, model = 'ZZZ')
+
+
+#Exponential by adding trend functionality
+fcholt <- holt(pststrain, h=150)
+
+
+
+#Plotting the models
+autoplot(pcedatasetComplete3, main="Plot of Exponential Model", ylab = "Time Series(TS)") +
+  autolayer(forecast(ifit_ets_AAN,h=150),  series = "ETS(AAN)",alpha = 0.5) +
+  autolayer(forecast(ifit_ets_auto,h=150), series = "ETS(ZZZ)",alpha = 0.5)+
+  autolayer(forecast(fcholt), series = "Holt",alpha = 0.5) +
+  guides(colour = guide_legend("Model"))
+
+
+#Performance metrics for exponential models
+print("ETS(Auto)")
+accuracy(forecast(ifit_ets_auto,h=150),pststest)
+print("Holt")
+accuracy(forecast(fcholt), pststest)
+```
+
+Here is an illustration of an exponential model with AAN, where each letter stands for (error type, Trend error, Seasonal Error). As there is no seasonality in the time series, none of the errors are passed as seasonal errors, whereas error and trend type are additive, and the holt method is used for exponential smoothing when the time series is a trend type model. According to the graph, both methods are equivalent in terms of error performance measures, but the automatic model of seasonal smoothing surpasses other models with the least error.
+
+### 3
+### ARIMA Model
+
+ARIMA stands for AutoRegressive Integrated Moving Average, and it uses the ARIMA function with the order (p,d,q), where d is the degree of differencing used to make the timeseries stationary, p is the number of lagged observations obtained from PACF, and q is the moving average order obtained from the ACF graph.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+#Differential of training set
+								
+# first differenced plots
+diff1_arima <- diff(pststrain)
+				
+# second differenced plots
+
+arima_differ2 <- diff(diff(pststrain))
+
+# ACF and PACF plots
+
+tsdisplay(diff1_arima) # First Differential 
+tsdisplay(arima_differ2) # Second Differential
+
+adf.test(arima_differ2) #To check the stationary 
+
+# Arima Standard Model with order(1,2,1)
+arima_stand <- arima(pststrain,order=c(1,2,1))
+checkresiduals(arima_stand)
+
+arima_forecast <- forecast(arima_stand,h=150)
+
+
+# Auto ARIMA
+auto_arima <- auto.arima(pststrain, approximation = FALSE, stepwise = FALSE)
+arima_forecast_auto <- forecast(auto_arima,h=150)
+checkresiduals(auto_arima)
+
+
+#Performance of ARIMA Model
+
+print("ARIMA(1,2,1)")
+accuracy(arima_forecast, pststest)
+print("AUTO-ARIMA")
+accuracy(arima_forecast_auto, pststest)
+
+#Plotting the model
+autoplot(pcedatasetComplete3,main="Plot of ARIMA Model", ylab = "Time Series(TS)") +
+  autolayer(arima_forecast, series = "ARIMA(1,2,1)", alpha = 0.5) +
+  autolayer(arima_forecast_auto, series = "ARIMA-Auto", alpha = 0.5) +
+  guides(colour = guide_legend("Model"))
+```
+
+Following the analysis, a model with a degree of differencing of two was created and tested for stationarity using adf.test, which confirmed stationarity. When compared to the auto-arima model, the ARIMA model passing order(1,2,1) has better performance metrics.
+
+### Model Comparison 
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+
+autoplot(pcedatasetComplete3,main="Plot of  Forecast Model", ylab = "Time Series(TS)") +
+  autolayer(ifit4,  series = "Drift",alpha = 0.5) +
+  autolayer(forecast(ifit_ets_auto,h=150), series = "Exponentinal Smoothing",alpha = 0.5)+
+  autolayer(arima_forecast, series = "ARIMA",alpha = 0.5) +
+  guides(colour = guide_legend("Model"))
+```
+
+Exponential smoothing is considerably closer to the original timeseries plot and has the smallest error difference, as shown in the graph.
+
+### Estimation of PCE (Oct 2021)
+
+Estimating the PCE for the month october 2021 with the best forecast model i.e, exponential smoothing.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+ifit_ets_oct21 <- ets(pcedatasetComplete3, model = 'ZZZ')
+forecast_oct21 <- forecast(ifit_ets_oct21,h=6)
+print(paste0("Estimation of PCE(Oct 2021):",round(forecast_oct21$mean[6],4)))
+```
+
+### One-Step Rolling Variation without Re-Estimation
+
+This model is used to get test data by fitting the training and original timeseries dataset forecasts in a single step, a process known as single step rolling estimate.
+
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+
+#Drift Method
+fit_drift <- rwf(pststrain,drift=TRUE)		
+refit_drift <- rwf(pcedatasetComplete3,model =fit_drift,drift=TRUE)
+fc_drift <- window(fitted(refit_drift), start=c(2008,11))
+print("Drift Model")
+accuracy(fc_drift,pststest)
+
+
+#Exponential Smoothing
+fit_ets <- ets(pststrain, model = 'ZZZ')
+refit_ets <-  ets(pcedatasetComplete3, model = fit_ets,use.initial.values=TRUE)
+fc_ets <- window(fitted(forecast(refit_ets)), start=c(2008,11))
+print("Exponential Model")
+accuracy(fc_ets,pststest)
+
+#Arima
+fit_arima <-  auto.arima(pststrain)
+refit_arima <- Arima(pcedatasetComplete3,model=fit_arima)
+fc_arima <- window(fitted(refit_arima),start=c(2008,11))
+print("Arima Model")
+accuracy(fc_arima,pststest)
+
+autoplot(pcedatasetComplete3,main="One-Step Rolling Variation without Re-Estimation", ylab = "Time Series(TS)") +
+  autolayer(fc_drift,  series = "Drift",alpha = 0.5) +
+  autolayer(fc_ets, series = "Exponentinal Smoothing",alpha = 0.5)+
+  autolayer(fc_arima, series = "ARIMA",alpha = 0.5) +
+  guides(colour = guide_legend("Model"))
+```
+When looking at the graph, all of the models perform about identically, with the exception of drift, which has somewhat better performance.
+
+## Conclusion
+
+---
+
+The best possible future trend of personal consumption expenditure is discovered using exponential smoothing, which is visualised using forecasting model analysis. The data that is varying over time is discovered by the output of future time series, and the forecast value increases gradually over time. One of the major drawbacks is the unpredictability of forecast data, which makes it impossible to provide a precise output because a lot of things might change in a day's time. As a result, the forecast provided is a preliminary study of probable solutions.
